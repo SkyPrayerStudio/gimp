@@ -464,13 +464,13 @@ lens_response (GtkWidget *widget,
 static gboolean
 lens_dialog (GimpDrawable *drawable)
 {
-  GtkWidget *dialog;
-  GtkWidget *main_vbox;
-  GtkWidget *table;
-  GtkWidget *preview;
-  GtkObject *adj;
-  gint       row = 0;
-  gboolean   run = FALSE;
+  GtkWidget     *dialog;
+  GtkWidget     *main_vbox;
+  GtkWidget     *table;
+  GtkWidget     *preview;
+  GtkAdjustment *adj;
+  gint           row = 0;
+  gboolean       run = FALSE;
 
   gimp_ui_init (PLUG_IN_BINARY, FALSE);
 

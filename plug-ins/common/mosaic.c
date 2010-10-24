@@ -573,17 +573,17 @@ mosaic (GimpDrawable *drawable,
 static gboolean
 mosaic_dialog (GimpDrawable *drawable)
 {
-  GtkWidget *dialog;
-  GtkWidget *main_vbox;
-  GtkWidget *preview;
-  GtkWidget *toggle;
-  GtkWidget *vbox;
-  GtkWidget *hbox;
-  GtkWidget *combo;
-  GtkWidget *table;
-  GtkObject *scale_data;
-  gint       row = 0;
-  gboolean   run;
+  GtkWidget     *dialog;
+  GtkWidget     *main_vbox;
+  GtkWidget     *preview;
+  GtkWidget     *toggle;
+  GtkWidget     *vbox;
+  GtkWidget     *hbox;
+  GtkWidget     *combo;
+  GtkWidget     *table;
+  GtkAdjustment *scale_data;
+  gint           row = 0;
+  gboolean       run;
 
   gimp_ui_init (PLUG_IN_BINARY, TRUE);
 
