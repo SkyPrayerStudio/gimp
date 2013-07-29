@@ -23,23 +23,31 @@
 #include "display-types.h"
 
 #include "core/gimpimage.h"
+#include "core/gimpprojection.h"
 
 #include "gimpdisplay.h"
 #include "gimpdisplay-handlers.h"
+#include "gimpdisplayshell.h"
 
 
 /*  local function prototypes  */
 
-static void   gimp_display_update_handler (GimpProjection *projection,
-                                           gboolean        now,
-                                           gint            x,
-                                           gint            y,
-                                           gint            w,
-                                           gint            h,
-                                           GimpDisplay    *display);
-static void   gimp_display_flush_handler  (GimpImage      *image,
-                                           gboolean        invalidate_preview,
-                                           GimpDisplay    *display);
+static void   gimp_display_update_handler       (GimpProjection   *projection,
+                                                 gboolean          now,
+                                                 gint              x,
+                                                 gint              y,
+                                                 gint              w,
+                                                 gint              h,
+                                                 GimpDisplay      *display);
+static void   gimp_display_flush_handler        (GimpImage        *image,
+                                                 gboolean          invalidate_preview,
+                                                 GimpDisplay      *display);
+
+static guint  gimp_display_add_tick_callback    (GimpObject       *source,
+                                                 GimpTickCallback  callback,
+                                                 gpointer          user_data);
+static void   gimp_display_remove_tick_callback (GimpObject       *source,
+                                                 guint             id);
 
 
 /*  public functions  */
@@ -62,6 +70,11 @@ gimp_display_connect (GimpDisplay *display)
   g_signal_connect (image, "flush",
                     G_CALLBACK (gimp_display_flush_handler),
                     display);
+
+  gimp_projection_add_tick_source (gimp_image_get_projection (image),
+                                   GIMP_OBJECT (display),
+                                   gimp_display_add_tick_callback,
+                                   gimp_display_remove_tick_callback);
 }
 
 void
@@ -74,6 +87,9 @@ gimp_display_disconnect (GimpDisplay *display)
   image = gimp_display_get_image (display);
 
   g_return_if_fail (GIMP_IS_IMAGE (image));
+
+  gimp_projection_remove_tick_source (gimp_image_get_projection (image),
+                                      GIMP_OBJECT (display));
 
   g_signal_handlers_disconnect_by_func (image,
                                         gimp_display_flush_handler,
@@ -105,4 +121,25 @@ gimp_display_flush_handler (GimpImage   *image,
                             GimpDisplay *display)
 {
   gimp_display_flush (display);
+}
+
+static guint
+gimp_display_add_tick_callback (GimpObject       *source,
+                                GimpTickCallback  callback,
+                                gpointer          user_data)
+{
+  GimpDisplayShell *shell = gimp_display_get_shell (GIMP_DISPLAY (source));
+
+  return gtk_widget_add_tick_callback (shell->canvas,
+                                       (GtkTickCallback) callback,
+                                       user_data, NULL);
+}
+
+static void
+gimp_display_remove_tick_callback (GimpObject *source,
+                                   guint       id)
+{
+  GimpDisplayShell *shell = gimp_display_get_shell (GIMP_DISPLAY (source));
+
+  gtk_widget_remove_tick_callback (shell->canvas, id);
 }

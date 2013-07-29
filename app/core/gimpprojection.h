@@ -22,6 +22,16 @@
 #include "gimpobject.h"
 
 
+typedef gboolean (* GimpTickCallback)   (gpointer          unused1,
+                                         gpointer          unused2,
+                                         GimpProjection   *proj);
+typedef guint    (* GimpAddTickFunc)    (GimpObject       *source,
+                                         GimpTickCallback  callback,
+                                         gpointer          user_data);
+typedef void     (* GimpRemoveTickFunc) (GimpObject       *source,
+                                         guint             id);
+
+
 typedef struct _GimpProjectionChunkRender GimpProjectionChunkRender;
 
 struct _GimpProjectionChunkRender
@@ -59,7 +69,12 @@ struct _GimpProjection
 
   GSList                    *update_areas;
   GimpProjectionChunkRender  chunk_render;
-  guint                      chunk_render_idle_id;
+  GimpObject                *chunk_render_tick_source;
+  guint                      chunk_render_tick_id;
+
+  GList                     *tick_sources;
+  GimpAddTickFunc            add_tick_func;
+  GimpRemoveTickFunc         remove_tick_func;
 
   gboolean                   invalidate_preview;
 };
@@ -79,16 +94,23 @@ struct _GimpProjectionClass
 
 GType            gimp_projection_get_type         (void) G_GNUC_CONST;
 
-GimpProjection * gimp_projection_new              (GimpProjectable   *projectable);
+GimpProjection * gimp_projection_new                (GimpProjectable   *projectable);
 
-void             gimp_projection_flush            (GimpProjection    *proj);
-void             gimp_projection_flush_now        (GimpProjection    *proj);
-void             gimp_projection_finish_draw      (GimpProjection    *proj);
+void             gimp_projection_flush              (GimpProjection    *proj);
+void             gimp_projection_flush_now          (GimpProjection    *proj);
+void             gimp_projection_finish_draw        (GimpProjection    *proj);
 
-gint64           gimp_projection_estimate_memsize (GimpImageBaseType  type,
-                                                   GimpPrecision      precision,
-                                                   gint               width,
-                                                   gint               height);
+void             gimp_projection_add_tick_source    (GimpProjection    *proj,
+                                                     GimpObject        *source,
+                                                     GimpAddTickFunc    add_func,
+                                                     GimpRemoveTickFunc remove_func);
+void             gimp_projection_remove_tick_source (GimpProjection    *proj,
+                                                     GimpObject        *source);
+
+gint64           gimp_projection_estimate_memsize   (GimpImageBaseType  type,
+                                                     GimpPrecision      precision,
+                                                     gint               width,
+                                                     gint               height);
 
 
 #endif /*  __GIMP_PROJECTION_H__  */

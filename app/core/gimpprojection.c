@@ -36,10 +36,6 @@
 #include "gimpprojection.h"
 
 
-/*  halfway between G_PRIORITY_HIGH_IDLE and G_PRIORITY_DEFAULT_IDLE  */
-#define GIMP_PROJECTION_IDLE_PRIORITY ((G_PRIORITY_HIGH_IDLE + \
-                                        G_PRIORITY_DEFAULT_IDLE) / 2)
-
 /*  chunk size for one iteration of the chunk renderer  */
 #define GIMP_PROJECTION_CHUNK_WIDTH  256
 #define GIMP_PROJECTION_CHUNK_HEIGHT 128
@@ -84,7 +80,9 @@ static void        gimp_projection_flush_whenever        (GimpProjection  *proj,
                                                           gboolean         now);
 static void        gimp_projection_chunk_render_start    (GimpProjection  *proj);
 static void        gimp_projection_chunk_render_stop     (GimpProjection  *proj);
-static gboolean    gimp_projection_chunk_render_callback (gpointer         data);
+static gboolean    gimp_projection_chunk_render_tick     (gpointer         unused1,
+                                                          gpointer         unused2,
+                                                          GimpProjection  *proj);
 static void        gimp_projection_chunk_render_init     (GimpProjection  *proj);
 static gboolean    gimp_projection_chunk_render_iteration(GimpProjection  *proj);
 static gboolean    gimp_projection_chunk_render_next_area(GimpProjection  *proj);
@@ -171,6 +169,9 @@ gimp_projection_finalize (GObject *object)
 
   if (proj->chunk_render.running)
     gimp_projection_chunk_render_stop (proj);
+
+  g_list_free (proj->tick_sources);
+  proj->tick_sources = NULL;
 
   gimp_area_list_free (proj->update_areas);
   proj->update_areas = NULL;
@@ -388,6 +389,53 @@ gimp_projection_finish_draw (GimpProjection *proj)
     }
 }
 
+void
+gimp_projection_add_tick_source (GimpProjection    *proj,
+                                 GimpObject        *source,
+                                 GimpAddTickFunc    add_func,
+                                 GimpRemoveTickFunc remove_func)
+{
+  g_return_if_fail (GIMP_IS_PROJECTION (proj));
+  g_return_if_fail (GIMP_IS_OBJECT (source));
+  g_return_if_fail (add_func != NULL);
+  g_return_if_fail (remove_func != NULL);
+
+  proj->tick_sources = g_list_append (proj->tick_sources, source);
+
+  /* need only one func strorage, they are the same for all sources */
+  proj->add_tick_func    = add_func;
+  proj->remove_tick_func = remove_func;
+}
+
+void
+gimp_projection_remove_tick_source (GimpProjection *proj,
+                                    GimpObject     *source)
+{
+  gboolean running;
+
+  g_return_if_fail (GIMP_IS_PROJECTION (proj));
+  g_return_if_fail (GIMP_IS_OBJECT (source));
+
+  running = (proj->chunk_render.running &&
+             source == proj->chunk_render_tick_source);
+
+  if (running)
+    gimp_projection_chunk_render_stop (proj);
+
+  proj->tick_sources = g_list_remove (proj->tick_sources, source);
+
+  if (! proj->tick_sources)
+    {
+      proj->add_tick_func    = NULL;
+      proj->remove_tick_func = NULL;
+    }
+
+  if (running && proj->tick_sources)
+    {
+      gimp_projection_chunk_render_start (proj);
+    }
+}
+
 
 /*  private functions  */
 
@@ -489,11 +537,14 @@ static void
 gimp_projection_chunk_render_start (GimpProjection *proj)
 {
   g_return_if_fail (proj->chunk_render.running == FALSE);
+  g_return_if_fail (proj->tick_sources != NULL);
 
-  proj->chunk_render_idle_id =
-    g_idle_add_full (GIMP_PROJECTION_IDLE_PRIORITY,
-                     gimp_projection_chunk_render_callback, proj,
-                     NULL);
+  proj->chunk_render_tick_source = proj->tick_sources->data;
+
+  proj->chunk_render_tick_id =
+    proj->add_tick_func (proj->chunk_render_tick_source,
+                         gimp_projection_chunk_render_tick,
+                         proj);
 
   proj->chunk_render.running = TRUE;
 }
@@ -503,17 +554,20 @@ gimp_projection_chunk_render_stop (GimpProjection *proj)
 {
   g_return_if_fail (proj->chunk_render.running == TRUE);
 
-  g_source_remove (proj->chunk_render_idle_id);
-  proj->chunk_render_idle_id = 0;
+  proj->remove_tick_func (proj->chunk_render_tick_source,
+                          proj->chunk_render_tick_id);
+
+  proj->chunk_render_tick_source = NULL;
+  proj->chunk_render_tick_id     = 0;
 
   proj->chunk_render.running = FALSE;
 }
 
 static gboolean
-gimp_projection_chunk_render_callback (gpointer data)
+gimp_projection_chunk_render_tick (gpointer        unused1,
+                                   gpointer        unused2,
+                                   GimpProjection *proj)
 {
-  GimpProjection *proj = data;
-
   if (! gimp_projection_chunk_render_iteration (proj))
     {
       gimp_projection_chunk_render_stop (proj);
@@ -571,9 +625,12 @@ gimp_projection_chunk_render_init (GimpProjection *proj)
           return;
         }
 
-      gimp_projection_chunk_render_next_area (proj);
+      if (proj->tick_sources)
+        {
+          gimp_projection_chunk_render_next_area (proj);
 
-      gimp_projection_chunk_render_start (proj);
+          gimp_projection_chunk_render_start (proj);
+        }
     }
 }
 
